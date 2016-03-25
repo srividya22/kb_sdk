@@ -2755,3 +2755,288 @@ https://narrative.kbase.us/functional-site/#/spec/type/KBaseNetworks.Network
                ]
 
 ```
+*KBaseAssembly SingleEndLibrary* definition
+
+optional:
+- hid
+- file_name
+- type
+- url
+- remote_md5
+- remote_sha1
+
+```
+    { ## KBaseAssembly.SingleEndLibrary
+      handle: { hid: 'ws_handle_id',
+    		file_name: 'user_defined_file_name',
+    		id: 'shock_node_id',
+    		url: 'url_of_shock_server',
+    		type: 'shock',
+    		remote_md5: 'md5_hash_of_contents',
+    		remote_sha1: 'sha1_hash_of_contents'
+    	      }
+    }
+```
+
+##### <A NAME="rna-seq-sample"></A>setup
+The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.py file) for preparing to work with the data object.  This will work for all KBaseRNASeq module datatypes definitions.
+
+```python
+import os
+import sys
+import shutil
+import hashlib
+import subprocess
+import requests
+import re
+import traceback
+import uuid
+from datetime import datetime
+from pprint import pprint, pformat
+import numpy as np
+from requests_toolbelt import MultipartEncoder
+from Bio import SeqIO
+from biokbase.workspace.client import Workspace as workspaceService
+from biokbase.AbstractHandle.Client import AbstractHandle as HandleService
+        
+class <ModuleName>:
+
+    workspaceURL = None
+    shockURL = None
+    handleURL = None
+    
+    def __init__(self, config):
+        self.workspaceURL = config['workspace-url']
+        self.shockURL = config['shock-url']
+        self.handleURL = config['handle-service-url']
+
+        self.scratch = os.path.abspath(config['scratch'])
+        if not os.path.exists(self.scratch):
+            os.makedirs(self.scratch)
+           
+    # target is a list for collecting log messages
+    def log(self, target, message):
+        if target is not None:
+            target.append(message)
+        print(message)
+        sys.stdout.flush()
+        
+    def run_<method_name> (self, ctx, params):
+        console = []
+        self.log(console,'Running run_<method_name> with params=')
+        self.log(console, pformat(params))
+
+        token = ctx['token']
+        ws = workspaceService(self.workspaceURL, token=token)
+        
+    	...
+```
+
+##### <A NAME="rna-seq-sample-obtaining"></A>obtaining
+The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.py file) for retrieving the data object.  This will work for  KBaseRNASeq.RNASeqSample type definitions.
+
+```python
+        #### Get the RNA-Seq sampe library name
+        try:
+            objects = ws.get_objects([{'ref': params['workspace_name']+'/'+params['rnaseq_read_library_name']}])
+            data = objects[0]['data']
+            info = objects[0]['info']
+            # Object Info Contents
+            # absolute ref = info[6] + '/' + info[0] + '/' + info[4]
+            # 0 - obj_id objid
+            # 1 - obj_name name
+            # 2 - type_string type
+            # 3 - timestamp save_date
+            # 4 - int version
+            # 5 - username saved_by
+            # 6 - ws_id wsid
+            # 7 - ws_name workspace
+            # 8 - string chsum
+            # 9 - int size 
+            # 10 - usermeta meta
+            type_name = info[2].split('.')[1].split('-')[0]
+        except Exception as e:
+            raise ValueError('Unable to fetch read library object from workspace: ' + str(e))
+            #to get the full stack trace: traceback.format_exc()
+	sample = objects[0]
+        #### Download the single end library
+        if 'singleend_sample' in sample['data'] and sample['data']['singleend_sample'] is not None:
+                lib_type = "SingleEnd"
+                singleend_sample = sample['data']['singleend_sample']
+                sample_shock_id = singleend_sample['handle']['id']
+                sample_filename = singleend_sample['handle']['file_name']
+                sample_url = singleend_sample['handle']['url']
+  		try:
+                	singleend_sample_file_location = os.path.join(self.scratch,sample_filename)
+                	singleend_sample_file = open(singleend_sample_file_location, 'w', 0)
+                	self.log(console, 'downloading reads file: '+str(singleend_sample_file_location))
+                	headers = {'Authorization': 'OAuth '+ctx['token']}
+                	r = requests.get(sample_url+'/node/'+sample_shock_id+'?download', stream=True, headers=headers)
+                	for chunk in r.iter_content(1024):
+                    		singleend_sample_file.write(chunk)
+                	singleend_sample_file.close();
+                	self.log(console, 'done')
+            	except Exception as e:
+                	print(traceback.format_exc())
+                	raise ValueError('Unable to download single-end rnaseq sample read library files: ' + str(e))
+        if 'pairedend_sample' in sample['data'] and sample['data']['pairedend_sample'] is not None:
+                lib_type = "PairedEnd"
+                pairedend_sample = sample['data']['pairedend_sample']
+                if "handle_1" in pairedend_sample and "id" in pairedend_sample['handle_1']:
+                        sample_shock_id1  = pairedend_sample['handle_1']['id']
+                if "handle_1" in pairedend_sample and "file_name" in pairedend_sample['handle_1']:
+                        filename1 = pairedend_sample['handle_1']['file_name']
+                if sample_shock_id1 is None:
+                        raise Exception("Handle1 there was no shock id found.")
+                if "handle_2" in pairedend_sample  and "id" in pairedend_sample['handle_2']:
+                        sample_shock_id2  = pairedend_sample['handle_2']['id']
+                if "handle_2" in pairedend_sample and "file_name" in pairedend_sample['handle_2']:
+                        filename2 = pairedend_sample['handle_2']['file_name']
+
+                if sample_shock_id2 is None:
+                        raise Exception("Handle2 there was not shock id found.")
+        
+```
+
+##### <A NAME="single-end-library-using"></A>using
+The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.py file) for manipulating the data object.  This will work for both KBaseFile and KBaseAssembly SingleEndLibrary type definitions.
+
+```python
+        # construct the command
+        megahit_cmd = [self.MEGAHIT]
+        megahit_cmd.append('-1')
+        megahit_cmd.append(forward_reads['file_name'])
+        for arg in params['args'].keys():
+            megahit_cmd.append('--'+arg)
+            megahit_cmd.append(params['args'][arg])
+
+        # set the output location
+        timestamp = int((datetime.utcnow() - datetime.utcfromtimestamp(0)).total_seconds()*1000)
+        output_dir = os.path.join(self.scratch,'output.'+str(timestamp))
+        megahit_cmd.append('-o')
+        megahit_cmd.append(output_dir)
+
+        # run megahit, capture output as it happens
+        self.log(console, 'running megahit:')
+        self.log(console, '    '+' '.join(megahit_cmd))
+        p = subprocess.Popen(megahit_cmd,
+                    cwd = self.scratch,
+                    stdout = subprocess.PIPE, 
+                    stderr = subprocess.STDOUT,
+                    shell = False)
+        while True:
+            line = p.stdout.readline()
+            if not line: break
+            self.log(console, line.replace('\n', ''))
+        p.stdout.close()
+        p.wait()
+        self.log(console, 'return code: ' + str(p.returncode))
+        if p.returncode != 0:
+            raise ValueError('Error running megahit, return code: '+str(p.returncode) + 
+                '\n\n'+ '\n'.join(console))
+```
+
+##### <A NAME="single-end-library-storing"></A>storing
+The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.py file) for storing the data object.  It will only store a single read file at a time.
+
+```python
+        self.log(console, 'storing SingleEndLibrary object: '+params['workspace_name']+'/'+params['output_read_library_name'])
+
+        # 1) upload files to shock
+        token = ctx['token']
+        forward_shock_file = self.upload_file_to_shock(
+				shock_service_url = self.shockURL,
+				filePath = 'data/small.forward.fq',
+				token = token
+				)
+        #pprint(forward_shock_file)
+
+        # 2) create handle
+        hs = HandleService(url=self.handleURL, token=token)
+        forward_handle = hs.persist_handle({
+	    'id': forward_shock_file['id'], 
+	    'type': 'shock',
+	    'url': self.shockURL,
+	    'file_name': forward_shock_file['file']['name'],
+	    'remote_md5': forward_shock_file['file']['checksum']['md5']})
+
+        # 3) save to WS
+        single_end_library = {
+            'lib': {
+                'file': {
+                    'hid': forward_handle,
+                    'file_name': forward_shock_file['file']['name'],
+                    'id': forward_shock_file['id'],
+                    'url': self.shockURL,
+                    'type':'shock',
+                    'remote_md5': forward_shock_file['file']['checksum']['md5']
+                },
+                'encoding': 'UTF8',
+                'type': 'fastq',
+                'size': forward_shock_file['file']['size']
+            },
+            'sequencing_tech': 'artificial reads'
+        }
+
+        # load the method provenance from the context object
+        provenance = [{}]
+        if 'provenance' in ctx:
+            provenance = ctx['provenance']
+        # add additional info to provenance here, in this case the input data object reference, service, and method
+        provenance[0]['input_ws_objects'] = []
+        provenance[0]['input_ws_objects'].append(params['workspace_name']+'/'+params['read_library_name'])
+        provenance[0]['service'] = 'MyModule'
+        provenance[0]['method'] = 'MyMethod'
+        
+        # save object in workspace
+        new_obj_info = ws.save_objects({
+							'workspace': params['workspace_name'],
+							'objects':[{
+									'type': 'KBaseFile.SingleEndLibrary',
+									'data': single_end_library,
+									'name': params['output_read_library_name'],
+									'meta': {},
+									'provenance': provenance
+								}]
+			})
+        #return new_obj_info[0]  # obj_ID
+        return new_obj_info[1]  # obj_NAME
+        
+    def upload_file_to_shock(self,
+                             shock_service_url = None,
+                             filePath = None,
+                             ssl_verify = True,
+                             token = None):
+        #
+        # Use HTTP multi-part POST to save a file to a SHOCK instance.
+        #
+        if token is None:
+            raise Exception("Authentication token required!")
+            
+        # build the header
+        header = dict()
+        header["Authorization"] = "Oauth {0}".format(token)
+        if filePath is None:
+            raise Exception("No file given for upload to SHOCK!")
+        dataFile = open(os.path.abspath(filePath), 'rb')
+        m = MultipartEncoder(fields={'upload': (os.path.split(filePath)[-1], dataFile)})
+        header['Content-Type'] = m.content_type
+
+        #logger.info("Sending {0} to {1}".format(filePath,shock_service_url))
+        try:
+            response = requests.post(shock_service_url + "/node", headers=header, data=m, allow_redirects=True, verify=ssl_verify)
+            dataFile.close()
+        except:
+            dataFile.close()
+            raise
+
+        if not response.ok:
+            response.raise_for_status()
+        result = response.json()
+        if result['error']:
+            raise Exception(result['error'][0])
+        else:
+            return result["data"]
+```
+[\[back to data type list\]](#data-type-list)
+ 
