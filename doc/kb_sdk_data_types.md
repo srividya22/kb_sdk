@@ -2676,10 +2676,27 @@ https://narrative.kbase.us/functional-site/#/spec/type/KBaseFeatureValues.Estima
 
 
 ### <A NAME="rna-seq-sample"></A>RNASeqSample
+https://narrative.kbase.us/#/spec/type/KBaseRNASeq.RNASeqSample
 
 
 
 ### <A NAME="rna-seq-sample-alignment"></A>RNASeqSampleAlignment
+https://narrative.kbase.us/#/spec/type/KBaseRNASeq.RNASeqSampleAlignment
+
+
+
+### <A NAME="bowtie2-indexes"></A>Bowtie2Indexes
+https://narrative.kbase.us/#/spec/type/KBaseRNASeq.Bowtie2Indexes
+
+
+
+### <A NAME="reference-annotation"></A>ReferenceAnnotation
+https://narrative.kbase.us/#/spec/type/KBaseRNASeq.ReferenceAnnotation
+
+
+
+### <A NAME="alignment-stats-results"></A>AlignmentStatsResults
+https://narrative.kbase.us/#/spec/type/KBaseRNASeq.AlignmentStatsResults
 
 
 
