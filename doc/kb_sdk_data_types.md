@@ -2924,24 +2924,25 @@ The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.p
 
 ```python
         # construct the command
-        megahit_cmd = [self.MEGAHIT]
-        megahit_cmd.append('-1')
-        megahit_cmd.append(forward_reads['file_name'])
-        for arg in params['args'].keys():
-            megahit_cmd.append('--'+arg)
-            megahit_cmd.append(params['args'][arg])
-
-        # set the output location
-        timestamp = int((datetime.utcnow() - datetime.utcfromtimestamp(0)).total_seconds()*1000)
-        output_dir = os.path.join(self.scratch,'output.'+str(timestamp))
-        megahit_cmd.append('-o')
-        megahit_cmd.append(output_dir)
-
+        if not os.path.exists(self.__SCRATCH): os.makedirs(self.__SCRATCH)
+            bowtie2_dir = self.__SCRATCH+'/tmp'
+        if os.path.exists(bowtie2_dir):
+            handler_util.cleanup(self.__LOGGER,bowtie2_dir)
+        if not os.path.exists(bowtie2_dir): os.makedirs(bowtie2_dir)
+        bowtie2_cmd = '' 
+        if(lib_type == "SingleEnd"):
+                singleend_sample_file = os.path.join(bowtie2_dir,singleend_sample_file)
+                bowtie2_cmd += " -U {0} -x {1} -S {2}".format(singleend_sample_file,bowtie2_base,out_file)
+        elif(lib_type == "PairedEnd"):
+                sample_file1 = os.path.join(bowtie2_dir,forward_reads_file)
+                sample_file2 = os.path.join(bowtie2_dir,reverse_reads_file)
+                bowtie2_cmd += " -1 {0} -2 {1} -x {2} -S {3}".format(sample_file1,sample_file2,bowtie2_base,out_file)	
+        
         # run megahit, capture output as it happens
-        self.log(console, 'running megahit:')
-        self.log(console, '    '+' '.join(megahit_cmd))
-        p = subprocess.Popen(megahit_cmd,
-                    cwd = self.scratch,
+        self.log(console, 'running bowtie2:')
+        self.log(console, '    '+' '.join(bowtie2_cmd))
+        p = subprocess.Popen(bowtie2_cmd,
+                    cwd = bowtie2_dir,
                     stdout = subprocess.PIPE, 
                     stderr = subprocess.STDOUT,
                     shell = False)
@@ -2961,7 +2962,7 @@ The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.p
 The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.py file) for storing the data object.  It will only store a single read file at a time.
 
 ```python
-        self.log(console, 'storing SingleEndLibrary object: '+params['workspace_name']+'/'+params['output_read_library_name'])
+        self.log(console, 'storing RNASeqSample object: '+params['workspace_name']+'/'+params['output_read_library_name'])
 
         # 1) upload files to shock
         token = ctx['token']
