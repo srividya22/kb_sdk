@@ -2785,7 +2785,7 @@ optional:
 - genome_scientific_name 
 - custom
 
-##### <A NAME="rna-seq-sample"></A>setup
+##### <A NAME="rna-seq-sample-setup"></A>setup
 The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.py file) for preparing to work with the data object.  This will work for all KBaseRNASeq module datatypes definitions.
 
 ```python
@@ -2873,9 +2873,9 @@ The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.p
                 sample_shock_id = singleend_sample['handle']['id']
                 sample_filename = singleend_sample['handle']['file_name']
                 sample_url = singleend_sample['handle']['url']
+                singleend_sample_file_location = os.path.join(self.scratch,sample_filename)
+                singleend_sample_file = open(singleend_sample_file_location, 'w', 0)
   		try:
-                	singleend_sample_file_location = os.path.join(self.scratch,sample_filename)
-                	singleend_sample_file = open(singleend_sample_file_location, 'w', 0)
                 	self.log(console, 'downloading reads file: '+str(singleend_sample_file_location))
                 	headers = {'Authorization': 'OAuth '+ctx['token']}
                 	r = requests.get(sample_url+'/node/'+sample_shock_id+'?download', stream=True, headers=headers)
@@ -2890,10 +2890,12 @@ The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.p
                 lib_type = "PairedEnd"
                 pairedend_sample = sample['data']['pairedend_sample']
                 sample_shock_id1  = pairedend_sample['handle_1']['id']
+                sample_shock_id2  = pairedend_sample['handle_2']['id']
                 filename1 = pairedend_sample['handle_1']['file_name']
+                filename2 = pairedend_sample['handle_2']['file_name']
                 sample_url = pairedend_sample['handle_1']['url']
                 forward_reads_file = open(filename1, 'w', 0)
-
+		reverse_reads_file = open(filename2, 'w', 0)
                 try:
                         if sample_shock_id1 is not None:
                 		self.log(console, 'downloading reads file: '+str(filename1))
@@ -2903,11 +2905,7 @@ The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.p
                     			forward_reads_file.write(chunk)
                 		forward_reads_file.close();
                 		self.log(console, 'done')
-                
-                if "handle_2" in pairedend_sample and "file_name" in pairedend_sample['handle_2']:
-                        filename2 = pairedend_sample['handle_2']['file_name']
                         sample_url = pairedend_sample['handle_2']['url']
-                        reverse_reads_file = open(filename1, 'w', 0)
                         if sample_shock_id2 is not None:
                 		self.log(console, 'downloading reads file: '+str(filename2))
                 		headers = {'Authorization': 'OAuth '+ctx['token']}
@@ -2916,9 +2914,12 @@ The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.p
                     			reverse_reads_file.write(chunk)
                 		reverse_reads_file.close();
                 		self.log(console, 'done')
+               except Exception as e:
+                	print(traceback.format_exc())
+                	raise ValueError('Unable to download paired-end rnaseq sample read library files: ' + str(e))
  ```
 
-##### <A NAME="single-end-library-using"></A>using
+##### <A NAME="rna-seq-sample-using"></A>using
 The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.py file) for manipulating the data object.  This will work for both KBaseFile and KBaseAssembly SingleEndLibrary type definitions.
 
 ```python
@@ -2956,7 +2957,7 @@ The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.p
                 '\n\n'+ '\n'.join(console))
 ```
 
-##### <A NAME="single-end-library-storing"></A>storing
+##### <A NAME="rna-seq-sample-storing"></A>storing
 The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.py file) for storing the data object.  It will only store a single read file at a time.
 
 ```python
