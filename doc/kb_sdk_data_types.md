@@ -2755,28 +2755,35 @@ https://narrative.kbase.us/functional-site/#/spec/type/KBaseNetworks.Network
                ]
 
 ```
-*KBaseAssembly SingleEndLibrary* definition
+### <A NAME="rna-seq-sample"></A>RNASeqSample
+https://narrative.kbase.us/functional-site/#/spec/type/KBaseRNASeq.RNASeqSample<br>
+
+- [data structure](#rna-seq-sample-ds)
+- [setup](#rna-seq-sample-setup)
+- [obtaining](#rna-seq-sample-obtaining)
+- [using](#rna-seq-sample-using)
+- [storing](#rna-seq-sample-storing)
+
+RNASeqSample objects contain sample specific information associated with a FASTQ formatted reads (or longer sequence) data and a pointers to KBaseAssembly.SingleEndLibrary and KBaseAssembly.PairedEndLibrary to the FASTQ reads file.
+
+##### <A NAME="rna-seq-sample-ds"></A>data structure
+
+*KBaseRNASeq RNASeqSample* definition
 
 optional:
-- hid
-- file_name
-- type
-- url
-- remote_md5
-- remote_sha1
-
-```
-    { ## KBaseAssembly.SingleEndLibrary
-      handle: { hid: 'ws_handle_id',
-    		file_name: 'user_defined_file_name',
-    		id: 'shock_node_id',
-    		url: 'url_of_shock_server',
-    		type: 'shock',
-    		remote_md5: 'md5_hash_of_contents',
-    		remote_sha1: 'sha1_hash_of_contents'
-    	      }
-    }
-```
+- library_type 
+- platform 
+- source 
+- tissue 
+- condition 
+- source_id 
+- ext_source_date 
+- sample_desc 
+- title 
+- sample_annotations 
+- genome_id 
+- genome_scientific_name 
+- custom
 
 ##### <A NAME="rna-seq-sample"></A>setup
 The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.py file) for preparing to work with the data object.  This will work for all KBaseRNASeq module datatypes definitions.
@@ -2882,21 +2889,34 @@ The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.p
         if 'pairedend_sample' in sample['data'] and sample['data']['pairedend_sample'] is not None:
                 lib_type = "PairedEnd"
                 pairedend_sample = sample['data']['pairedend_sample']
-                if "handle_1" in pairedend_sample and "id" in pairedend_sample['handle_1']:
-                        sample_shock_id1  = pairedend_sample['handle_1']['id']
-                if "handle_1" in pairedend_sample and "file_name" in pairedend_sample['handle_1']:
-                        filename1 = pairedend_sample['handle_1']['file_name']
-                if sample_shock_id1 is None:
-                        raise Exception("Handle1 there was no shock id found.")
-                if "handle_2" in pairedend_sample  and "id" in pairedend_sample['handle_2']:
-                        sample_shock_id2  = pairedend_sample['handle_2']['id']
+                sample_shock_id1  = pairedend_sample['handle_1']['id']
+                filename1 = pairedend_sample['handle_1']['file_name']
+                sample_url = pairedend_sample['handle_1']['url']
+                forward_reads_file = open(filename1, 'w', 0)
+
+                try:
+                        if sample_shock_id1 is not None:
+                		self.log(console, 'downloading reads file: '+str(filename1))
+                		headers = {'Authorization': 'OAuth '+ctx['token']}
+        	 		r = requests.get(sample_url+'/node/'sample_shock_id1++'?download', stream=True, headers=headers)
+                		for chunk in r.iter_content(1024):
+                    			forward_reads_file.write(chunk)
+                		forward_reads_file.close();
+                		self.log(console, 'done')
+                
                 if "handle_2" in pairedend_sample and "file_name" in pairedend_sample['handle_2']:
                         filename2 = pairedend_sample['handle_2']['file_name']
-
-                if sample_shock_id2 is None:
-                        raise Exception("Handle2 there was not shock id found.")
-        
-```
+                        sample_url = pairedend_sample['handle_2']['url']
+                        reverse_reads_file = open(filename1, 'w', 0)
+                        if sample_shock_id2 is not None:
+                		self.log(console, 'downloading reads file: '+str(filename2))
+                		headers = {'Authorization': 'OAuth '+ctx['token']}
+        	 		r = requests.get(sample_url+'/node/'sample_shock_id2++'?download', stream=True, headers=headers)
+                		for chunk in r.iter_content(1024):
+                    			reverse_reads_file.write(chunk)
+                		reverse_reads_file.close();
+                		self.log(console, 'done')
+ ```
 
 ##### <A NAME="single-end-library-using"></A>using
 The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.py file) for manipulating the data object.  This will work for both KBaseFile and KBaseAssembly SingleEndLibrary type definitions.
