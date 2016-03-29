@@ -2865,7 +2865,7 @@ The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.p
         except Exception as e:
             raise ValueError('Unable to fetch read library object from workspace: ' + str(e))
             #to get the full stack trace: traceback.format_exc()
-	sample = objects[0]
+        sample = objects[0]
         #### Download the single end library
         if 'singleend_sample' in sample['data'] and sample['data']['singleend_sample'] is not None:
                 lib_type = "SingleEnd"
@@ -2900,7 +2900,7 @@ The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.p
                         if sample_shock_id1 is not None:
                 		self.log(console, 'downloading reads file: '+str(filename1))
                 		headers = {'Authorization': 'OAuth '+ctx['token']}
-        	 		r = requests.get(sample_url+'/node/'sample_shock_id1++'?download', stream=True, headers=headers)
+        	 		r = requests.get(sample_url+'/node/'+sample_shock_id1+'?download', stream=True, headers=headers)
                 		for chunk in r.iter_content(1024):
                     			forward_reads_file.write(chunk)
                 		forward_reads_file.close();
@@ -2909,7 +2909,7 @@ The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.p
                         if sample_shock_id2 is not None:
                 		self.log(console, 'downloading reads file: '+str(filename2))
                 		headers = {'Authorization': 'OAuth '+ctx['token']}
-        	 		r = requests.get(sample_url+'/node/'sample_shock_id2++'?download', stream=True, headers=headers)
+        	 		r = requests.get(sample_url+'/node/+'sample_shock_id2+'?download', stream=True, headers=headers)
                 		for chunk in r.iter_content(1024):
                     			reverse_reads_file.write(chunk)
                 		reverse_reads_file.close();
@@ -2962,103 +2962,33 @@ The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.p
 The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.py file) for storing the data object.  It will only store a single read file at a time.
 
 ```python
-        self.log(console, 'storing RNASeqSample object: '+params['workspace_name']+'/'+params['output_read_library_name'])
-
-        # 1) upload files to shock
-        token = ctx['token']
-        forward_shock_file = self.upload_file_to_shock(
-				shock_service_url = self.shockURL,
-				filePath = 'data/small.forward.fq',
-				token = token
-				)
-        #pprint(forward_shock_file)
-
-        # 2) create handle
-        hs = HandleService(url=self.handleURL, token=token)
-        forward_handle = hs.persist_handle({
-	    'id': forward_shock_file['id'], 
-	    'type': 'shock',
-	    'url': self.shockURL,
-	    'file_name': forward_shock_file['file']['name'],
-	    'remote_md5': forward_shock_file['file']['checksum']['md5']})
-
-        # 3) save to WS
-        single_end_library = {
-            'lib': {
-                'file': {
-                    'hid': forward_handle,
-                    'file_name': forward_shock_file['file']['name'],
-                    'id': forward_shock_file['id'],
-                    'url': self.shockURL,
-                    'type':'shock',
-                    'remote_md5': forward_shock_file['file']['checksum']['md5']
-                },
-                'encoding': 'UTF8',
-                'type': 'fastq',
-                'size': forward_shock_file['file']['size']
-            },
-            'sequencing_tech': 'artificial reads'
-        }
-
-        # load the method provenance from the context object
+        self.log(console, 'storing RNASeqSample object: '+params['workspace_name']+'/'+params['output_rnaseq_sample_name'])
+	# load the method provenance from the context object
         provenance = [{}]
         if 'provenance' in ctx:
             provenance = ctx['provenance']
         # add additional info to provenance here, in this case the input data object reference, service, and method
         provenance[0]['input_ws_objects'] = []
-        provenance[0]['input_ws_objects'].append(params['workspace_name']+'/'+params['read_library_name'])
+        provenance[0]['input_ws_objects'].append(params['workspace_name']+'/'+params['single_end_sample'])
         provenance[0]['service'] = 'MyModule'
         provenance[0]['method'] = 'MyMethod'
-        
-        # save object in workspace
-        new_obj_info = ws.save_objects({
-							'workspace': params['workspace_name'],
-							'objects':[{
-									'type': 'KBaseFile.SingleEndLibrary',
-									'data': single_end_library,
-									'name': params['output_read_library_name'],
-									'meta': {},
-									'provenance': provenance
-								}]
-			})
-        #return new_obj_info[0]  # obj_ID
-        return new_obj_info[1]  # obj_NAME
-        
-    def upload_file_to_shock(self,
-                             shock_service_url = None,
-                             filePath = None,
-                             ssl_verify = True,
-                             token = None):
-        #
-        # Use HTTP multi-part POST to save a file to a SHOCK instance.
-        #
-        if token is None:
-            raise Exception("Authentication token required!")
-            
-        # build the header
-        header = dict()
-        header["Authorization"] = "Oauth {0}".format(token)
-        if filePath is None:
-            raise Exception("No file given for upload to SHOCK!")
-        dataFile = open(os.path.abspath(filePath), 'rb')
-        m = MultipartEncoder(fields={'upload': (os.path.split(filePath)[-1], dataFile)})
-        header['Content-Type'] = m.content_type
-
-        #logger.info("Sending {0} to {1}".format(filePath,shock_service_url))
-        try:
-            response = requests.post(shock_service_url + "/node", headers=header, data=m, allow_redirects=True, verify=ssl_verify)
-            dataFile.close()
-        except:
-            dataFile.close()
-            raise
-
-        if not response.ok:
-            response.raise_for_status()
-        result = response.json()
-        if result['error']:
-            raise Exception(result['error'][0])
-        else:
-            return result["data"]
+        rep_id = 'Sample_rep_id'
+        label = 'Sample_treatment_short_name'
+        s_res = ws_client.get_objects([{'name' : params['single_end_sample'],
+                                        	'workspace' : params['workspace_name'}])
+		r_obj['metadata']['sample_id'] = output_rnaseq_sample_name
+		r_obj['metadata']['replicate_id'] = str(rep_id)
+		r_obj['metadata']['condition'] = str(label)
+                r_obj[sample_type] = s_res[0]['data']
+		samp_obj = ws_client.save_objects( {
+                                 "workspace":params['ws_id'],
+                                 "objects": [{
+                                                "type":"KBaseRNASeq.RNASeqSample",
+                                                "data":r_obj,
+                                                "name":r_obj['metadata']['sample_id'],
+                                                'meta': {},
+                                    		'provenance': provenance}]
+                                })
 ```
 [\[back to data type list\]](#data-type-list)
  
