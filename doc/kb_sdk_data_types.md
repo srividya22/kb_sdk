@@ -2990,5 +2990,189 @@ The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.p
                                     		'provenance': provenance}]
                                 })
 ```
+### <A NAME="rna-seq-sample-alignment"></A>RNASeqSampleAlignment
+https://narrative.kbase.us/functional-site/#/spec/type/KBaseRNASeq.RNASeqSampleAlignment<br>
+
+- [data structure](#rna-seq-sample-alignment-ds)
+- [setup](#rna-seq-sample-alignment-setup)
+- [obtaining](#rna-seq-sample-alignment-obtaining)
+- [using](#rna-seq-sample-alignment-using)
+- [storing](#rna-seq-sample-alignment-storing)
+
+RNASeqSampleAlignment objects contain bam alignment file and some metadata like the aligner used for alignment and the options used to align the KBaseRNASeq.RNASeqSample object.
+ 
+##### <A NAME="rna-seq-sample-alignment-ds"></A>data structure
+
+*KBaseRNASeq RNASeqSampleAlignment* definition
+
+optional:
+-aligner_opts
+-aligner_version 
+-aligned_using
+-metadata
+	-metadata.sample_id
+	-metadata.replicate_id
+	-metadata.platform
+	-metadata.title
+	-metadata.source
+	-metadata.source_id
+	-metadata.ext_source_date
+	-metadata.sample_desc
+	-metadata.genome_id
+	-metadata.tissue
+	-metadata.condition
+
+##### <A NAME="rna-seq-sample-alignment-setup"></A>setup
+The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.py file) for preparing to work with the data object.  This will work for all KBaseRNASeq module datatypes definitions.
+
+```python
+import os
+import sys
+import shutil
+import hashlib
+import subprocess
+import requests
+import re
+import traceback
+import uuid
+from datetime import datetime
+from pprint import pprint, pformat
+import numpy as np
+from requests_toolbelt import MultipartEncoder
+from Bio import SeqIO
+from biokbase.workspace.client import Workspace as workspaceService
+from biokbase.AbstractHandle.Client import AbstractHandle as HandleService
+        
+class <ModuleName>:
+
+    workspaceURL = None
+    shockURL = None
+    handleURL = None
+    
+    def __init__(self, config):
+        self.workspaceURL = config['workspace-url']
+        self.shockURL = config['shock-url']
+        self.handleURL = config['handle-service-url']
+
+        self.scratch = os.path.abspath(config['scratch'])
+        if not os.path.exists(self.scratch):
+            os.makedirs(self.scratch)
+           
+    # target is a list for collecting log messages
+    def log(self, target, message):
+        if target is not None:
+            target.append(message)
+        print(message)
+        sys.stdout.flush()
+        
+    def run_<method_name> (self, ctx, params):
+        console = []
+        self.log(console,'Running run_<method_name> with params=')
+        self.log(console, pformat(params))
+
+        token = ctx['token']
+        ws = workspaceService(self.workspaceURL, token=token)
+        
+    	...
+```
+
+##### <A NAME="rna-seq-sample-alignment-obtaining"></A>obtaining
+The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.py file) for retrieving the data object.  This will work for  KBaseRNASeq.RNASeqSample type definitions.
+
+```python
+
+        #### Get the RNA-Seq sampe library name
+        try:
+            objects = ws.get_objects([{'ref': params['workspace_name']+'/'+params['sample_alignment_name']}])
+            data = objects[0]['data']
+            info = objects[0]['info'] # Look for the object info array information from previous examples
+            type_name = info[2].split('.')[1].split('-')[0]
+        except Exception as e:
+            raise ValueError('Unable to fetch sample alignment object from workspace: ' + str(e))
+            #to get the full stack trace: traceback.format_exc()
+        sample = objects[0]
+        #### Download the RNASeqSampleAlignment
+	if 'data' in sample and sample['data'] is not None:
+		sample_url = sample['data']['file']['url']
+                self.__LOGGER.info("Downloading Sample Alignment")
+                try:
+                     headers = {'Authorization': 'OAuth '+ctx['token']}
+        	     r = requests.get(sample_url+'/node/+'sample['data']['file']['id']+'?download', stream=True, headers=headers)
+                except Exception,e:
+                     raise Exception( "Unable to download shock file, {0}".format(e))
+
+ ```
+
+##### <A NAME="rna-seq-sample-alignment-using"></A>using
+The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.py file) for manipulating the data object.  This will work for both KBaseFile and KBaseAssembly SingleEndLibrary type definitions.
+
+```python
+        # construct the command
+        if not os.path.exists(self.__SCRATCH): os.makedirs(self.__SCRATCH)
+            bowtie2_dir = self.__SCRATCH+'/tmp'
+        if os.path.exists(bowtie2_dir):
+            handler_util.cleanup(self.__LOGGER,bowtie2_dir)
+        if not os.path.exists(bowtie2_dir): os.makedirs(bowtie2_dir)
+        bowtie2_cmd = '' 
+        if(lib_type == "SingleEnd"):
+                singleend_sample_file = os.path.join(bowtie2_dir,singleend_sample_file)
+                bowtie2_cmd += " -U {0} -x {1} -S {2}".format(singleend_sample_file,bowtie2_base,out_file)
+        elif(lib_type == "PairedEnd"):
+                sample_file1 = os.path.join(bowtie2_dir,forward_reads_file)
+                sample_file2 = os.path.join(bowtie2_dir,reverse_reads_file)
+                bowtie2_cmd += " -1 {0} -2 {1} -x {2} -S {3}".format(sample_file1,sample_file2,bowtie2_base,out_file)	
+        
+        # run megahit, capture output as it happens
+        self.log(console, 'running bowtie2:')
+        self.log(console, '    '+' '.join(bowtie2_cmd))
+        p = subprocess.Popen(bowtie2_cmd,
+                    cwd = bowtie2_dir,
+                    stdout = subprocess.PIPE, 
+                    stderr = subprocess.STDOUT,
+                    shell = False)
+        while True:
+            line = p.stdout.readline()
+            if not line: break
+            self.log(console, line.replace('\n', ''))
+        p.stdout.close()
+        p.wait()
+        self.log(console, 'return code: ' + str(p.returncode))
+        if p.returncode != 0:
+            raise ValueError('Error running megahit, return code: '+str(p.returncode) + 
+                '\n\n'+ '\n'.join(console))
+```
+
+##### <A NAME="rna-seq-sample-alignment-storing"></A>storing
+The following is a python snippet (e.g. for use in the SDK \<module_name\>Impl.py file) for storing the data object.  It will only store a single read file at a time.
+
+```python
+        self.log(console, 'storing RNASeqSample object: '+params['workspace_name']+'/'+params['output_rnaseq_sample_name'])
+	# load the method provenance from the context object
+        provenance = [{}]
+        if 'provenance' in ctx:
+            provenance = ctx['provenance']
+        # add additional info to provenance here, in this case the input data object reference, service, and method
+        provenance[0]['input_ws_objects'] = []
+        provenance[0]['input_ws_objects'].append(params['workspace_name']+'/'+params['single_end_sample'])
+        provenance[0]['service'] = 'MyModule'
+        provenance[0]['method'] = 'MyMethod'
+        rep_id = 'Sample_rep_id'
+        label = 'Sample_treatment_short_name'
+        s_res = ws_client.get_objects([{'name' : params['single_end_sample'],
+                                        	'workspace' : params['workspace_name'}])
+		r_obj['metadata']['sample_id'] = output_rnaseq_sample_name
+		r_obj['metadata']['replicate_id'] = str(rep_id)
+		r_obj['metadata']['condition'] = str(label)
+                r_obj[sample_type] = s_res[0]['data']
+		samp_obj = ws_client.save_objects( {
+                                 "workspace":params['ws_id'],
+                                 "objects": [{
+                                                "type":"KBaseRNASeq.RNASeqSample",
+                                                "data":r_obj,
+                                                "name":r_obj['metadata']['sample_id'],
+                                                'meta': {},
+                                    		'provenance': provenance}]
+                                })
+```
 [\[back to data type list\]](#data-type-list)
  
